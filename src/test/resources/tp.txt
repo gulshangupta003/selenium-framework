@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Configuration status="WARN" monitorInterval="30">
+
+    <Properties>
+        <Property name="logPattern">%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n</Property>
+        <Property name="logFileName">logs/log.log</Property>
+    </Properties>
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="${logPattern}"/>
+        </Console>
+
+        <File name="File" fileName="${logFileName}" append="true">
+            <PatternLayout pattern="${logPattern}"/>
+        </File>
+    </Appenders>
+
+    <Loggers>
+        <Root level="info">
+            <AppenderRef ref="Console"/>
+            <AppenderRef ref="File"/>
+        </Root>
+    </Loggers>
+
+</Configuration>
+
+
+
+
+
+
+
+
+
+
+
+
+
+package web.utils;
+
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.core.LoggerContext;
+import org.apache.logging.log4j.core.appender.FileAppender;
+import org.apache.logging.log4j.core.appender.ConsoleAppender;
+import org.apache.logging.log4j.core.config.Configuration;
+import org.apache.logging.log4j.core.layout.PatternLayout;
+import org.apache.logging.log4j.core.config.LoggerConfig;
+import org.testng.ITestResult;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
+
+public class LoggerUtil {
+    public static Logger setupLogger(ITestResult result) {
+        String className = result.getTestClass().getName();
+        String methodName = result.getMethod().getMethodName();
+        String logDirPath = Paths.get("logs", className).toString();
+        String logFilePath = Paths.get(logDirPath, toSnakeCase(methodName) + ".log").toString();
+        String pattern = "%d{yyyy-MM-dd HH:mm:ss} [%t] %-5level %logger{36} - %msg%n";
+
+        try {
+            Files.createDirectories(Paths.get(logDirPath));
+
+            // Get the logger context and configuration
+            LoggerContext context = (LoggerContext) LogManager.getContext(false);
+            Configuration config = context.getConfiguration();
+
+            // Define the layout for log output
+            PatternLayout layout = PatternLayout.newBuilder()
+                    .withPattern(pattern)
+                    .withConfiguration(config)
+                    .build();
+
+            // Create and configure FileAppender
+            String fileAppenderName = "FileAppender";
+            if (config.getAppender(fileAppenderName) == null) {
+                FileAppender fileAppender = FileAppender.newBuilder()
+                        .setName(fileAppenderName)
+                        .withFileName(logFilePath)
+                        .setLayout(layout)
+                        .setConfiguration(config)
+                        .build();
+                fileAppender.start();
+                config.addAppender(fileAppender);
+            }
+
+            // Create and configure ConsoleAppender
+            String consoleAppenderName = "ConsoleAppender";
+            if (config.getAppender(consoleAppenderName) == null) {
+                ConsoleAppender consoleAppender = ConsoleAppender.newBuilder()
+                        .setName(consoleAppenderName)
+                        .setTarget(ConsoleAppender.Target.SYSTEM_OUT)
+                        .setLayout(layout)
+                        .setConfiguration(config)
+                        .build();
+                consoleAppender.start();
+                config.addAppender(consoleAppender);
+            }
+
+            // Create a new LoggerConfig for the specific test class
+            LoggerConfig loggerConfig = new LoggerConfig(className, org.apache.logging.log4j.Level.INFO, false);
+            loggerConfig.addAppender(config.getAppender(fileAppenderName), null, null);
+            loggerConfig.addAppender(config.getAppender(consoleAppenderName), null, null);
+
+            // Add this LoggerConfig to the logger context, without affecting the root logger
+            config.addLogger(className, loggerConfig);
+
+            // Update the context to apply the changes
+            context.updateLoggers();
+
+            // Return the logger instance
+            Logger logger = LogManager.getLogger(className);
+            logger.info("Logger setup completed for test: {}", methodName);
+            return logger;
+
+        } catch (Exception e) {
+            throw new RuntimeException(String.format("Failed to setup logger for test: %s", result.getMethod().getMethodName()), e);
+        }
+    }
+
+    private static String toSnakeCase(String str) {
+        return str.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase();
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
